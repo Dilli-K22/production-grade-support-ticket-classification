@@ -1,0 +1,4 @@
+experiment,model,tfidf_ngram_range,class_weight,accuracy,macro_f1,weighted_f1,notes
+baseline_v1,LogisticRegression,"(1,2)",none,0.8540,0.8482,0.8538,"Initial TF-IDF baseline"
+baseline_v2,LogisticRegression,"(1,2)",balanced,0.8583,0.8600,0.8589,"Improved minority-class recall"
+final_v1,LogisticRegression,"(1,2)",balanced,0.8538,0.8546,0.8547,"Final evaluation on untouched test set"
