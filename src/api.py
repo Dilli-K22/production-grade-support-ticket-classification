@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from src.predict import load_model, predict_with_model
 from pydantic import BaseModel, Field, field_validator
 
@@ -25,6 +25,27 @@ def health_check(request: Request):
     return {
         "status": "ok" if model_loaded else "unavailable",
         "model_loaded": model_loaded,
+    }
+
+@app.get("/health/live")
+def liveness_check():
+    return {"status": "alive"}
+
+
+@app.get("/health/ready")
+def readiness_check(request: Request):
+    model_loaded = getattr(request.app.state, "model", None) is not None
+
+    if not model_loaded:
+
+        raise HTTPException(
+            status_code=503,
+            detail="Model is not ready.",
+        )
+
+    return {
+        "status": "ready",
+        "model_loaded": True,
     }
 
 
