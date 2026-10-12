@@ -1,3 +1,4 @@
+
 from pathlib import Path
 
 import joblib
@@ -10,14 +11,20 @@ def load_model():
     return joblib.load(MODEL_PATH)
 
 
-def predict_ticket(text: str) -> tuple[str, list[tuple[str, float]]]:
+def _validate_ticket(text: str) -> None:
     if not isinstance(text, str):
         raise TypeError("Ticket text must be a string.")
 
     if not text.strip():
         raise ValueError("Ticket text cannot be empty.")
 
-    model = load_model()
+
+def predict_with_model(
+    model,
+    text: str,
+) -> tuple[str, list[tuple[str, float]]]:
+    _validate_ticket(text)
+
     prediction = model.predict([text])[0]
     probabilities = model.predict_proba([text])[0]
     classes = model.classes_
@@ -30,6 +37,11 @@ def predict_ticket(text: str) -> tuple[str, list[tuple[str, float]]]:
 
     return prediction, ranked_predictions
 
+
+def predict_ticket(text: str) -> tuple[str, list[tuple[str, float]]]:
+    _validate_ticket(text)
+    model = load_model()
+    return predict_with_model(model, text)
 
 
 if __name__ == "__main__":
