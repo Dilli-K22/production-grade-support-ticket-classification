@@ -1,7 +1,10 @@
+import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, HTTPException
 from src.predict import load_model, predict_with_model
 from pydantic import BaseModel, Field, field_validator
+
+logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -72,15 +75,32 @@ class PredictionResponse(BaseModel):
 
 @app.post("/predict", response_model=PredictionResponse)
 def predict(request: TicketRequest, http_request: Request):
-    predicted_class, ranked_predictions = predict_with_model(
-        http_request.app.state.model,
-        request.ticket_text,
-    )
+    model = getattr(http_request.app.state, "model", None)
 
-    return PredictionResponse(
-        predicted_category=predicted_class,
-        probabilities={
-            category: float(probability)
-            for category, probability in ranked_predictions
-        },
-    )
+    if model is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Prediction service is not ready.",
+        )
+
+    try:
+        predicted_class, ranked_predictions = predict_with_model(
+            model,
+            request.ticket_text,
+        )
+
+        return PredictionResponse(
+            predicted_category=predicted_class,
+            probabilities={
+                category: float(probability)
+                for category, probability in ranked_predictions
+            },
+        )
+
+    except Exception:
+        logger.exception("Unexpected error during ticket prediction.")
+
+        raise HTTPException(
+            status_code=500,
+            detail="An internal error occurred while processing the ticket.",
+        ) from None
