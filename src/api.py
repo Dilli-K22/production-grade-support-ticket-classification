@@ -1,8 +1,12 @@
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, HTTPException
-from src.predict import load_model, predict_with_model
 from pydantic import BaseModel, Field, field_validator
+from src.logging_config import configure_logging
+
+configure_logging()
+
+from src.predict import load_model, predict_with_model
 
 logger = logging.getLogger(__name__)
 
