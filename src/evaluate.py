@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import joblib
 import pandas as pd
 from sklearn.metrics import (
@@ -7,10 +5,10 @@ from sklearn.metrics import (
     classification_report,
     confusion_matrix,
 )
+from src.config import MODEL_PATH, PROCESSED_DATA_DIR
 
 
-MODEL_PATH = Path("models/ticket_classifier.joblib")
-TEST_PATH = Path("data/processed/test.csv")
+TEST_PATH = PROCESSED_DATA_DIR / "test.csv"
 
 
 def main() -> None:

@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import joblib
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -7,12 +5,12 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import classification_report, ConfusionMatrixDisplay
 import matplotlib.pyplot as plt
+from src.config import MODEL_PATH, PROCESSED_DATA_DIR
 
-DATA_DIR = Path("data/processed")
+DATA_DIR = PROCESSED_DATA_DIR
 
 TRAIN_PATH = DATA_DIR / "train.csv"
 VALIDATION_PATH = DATA_DIR / "validation.csv"
-MODEL_PATH = Path("models/ticket_classifier.joblib")
 
 
 def main() -> None:

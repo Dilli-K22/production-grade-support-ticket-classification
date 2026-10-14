@@ -1,13 +1,12 @@
-from pathlib import Path
-
 import pandas as pd
 from sklearn.model_selection import train_test_split
+from src.config import PROCESSED_DATA_DIR, RAW_DATA_DIR
 
 
 RANDOM_STATE = 42
 
-DATA_PATH = Path("data/raw/all_tickets_processed_improved_v3.csv")
-OUTPUT_DIR = Path("data/processed")
+DATA_PATH = RAW_DATA_DIR / "all_tickets_processed_improved_v3.csv"
+OUTPUT_DIR = PROCESSED_DATA_DIR
 
 
 def main() -> None:

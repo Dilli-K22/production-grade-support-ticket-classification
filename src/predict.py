@@ -1,10 +1,6 @@
-
-from pathlib import Path
-
 import joblib
 
-
-MODEL_PATH = Path("models/ticket_classifier.joblib")
+from src.config import MODEL_PATH
 
 
 def load_model():
