@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, HTTPException
 from pydantic import BaseModel, Field, field_validator
 from src.logging_config import configure_logging
+from src.settings import get_settings
 
 configure_logging()
 
@@ -17,10 +18,12 @@ async def lifespan(app: FastAPI):
     app.state.model = None
 
 
+settings = get_settings()
+
 app = FastAPI(
-    title="Support Ticket Classification API",
+    title=settings.app_name,
     description="Classifies IT support tickets into predefined categories.",
-    version="1.0.0",
+    version=settings.app_version,
     lifespan=lifespan,
 )
 

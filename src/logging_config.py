@@ -1,6 +1,7 @@
 import logging
 from logging.handlers import RotatingFileHandler
 from src.config import LOGS_DIR
+from src.settings import get_settings
 
 LOG_DIR = LOGS_DIR
 LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -28,7 +29,7 @@ def configure_logging() -> None:
     console_handler.setFormatter(formatter)
 
     logging.basicConfig(
-        level=logging.INFO,
+        level=get_settings().log_level,
         handlers=[file_handler, console_handler],
         force=True,
     )
