@@ -1,4 +1,4 @@
-annotated-doc==0.0.5
+﻿annotated-doc==0.0.5
 annotated-types==0.8.0
 anyio==4.15.1
 argon2-cffi==25.1.0
@@ -85,11 +85,13 @@ psutil==7.2.2
 pure_eval==0.2.4
 pycparser==3.0
 pydantic==2.13.5
+pydantic-settings==2.15.0
 pydantic_core==2.46.5
 Pygments==2.21.0
 pyparsing==3.3.3
 pytest==9.1.1
 python-dateutil==2.9.0.post0
+python-dotenv==1.2.4
 python-json-logger==4.2.0
 pywinpty==3.0.5
 PyYAML==6.0.3
@@ -108,8 +110,6 @@ six==1.17.0
 soupsieve==2.9.2
 stack-data==0.6.3
 starlette==1.7.0
-# Editable Git install with no remote (support-ticket-classifier==0.1.0)
--e d:\old_project\support-ticket-classifier
 terminado==0.18.1
 threadpoolctl==3.7.0
 tinycss2==1.5.1
