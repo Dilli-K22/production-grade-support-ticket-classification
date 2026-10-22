@@ -46,3 +46,7 @@ dist/
 *.egg-info/
 # Version the current model for reproducible CI
 !models/ticket_classifier.joblib
+
+# Generated evaluation reports
+reports/*
+!reports/.gitkeep

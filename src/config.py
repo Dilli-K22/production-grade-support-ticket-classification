@@ -14,6 +14,7 @@ PROCESSED_DATA_DIR = DATA_DIR / "processed"
 MODELS_DIR = PROJECT_ROOT / "models"
 LOGS_DIR = PROJECT_ROOT / "logs"
 CONFIGS_DIR = PROJECT_ROOT / "configs"
+REPORTS_DIR = PROJECT_ROOT / "reports"
 
 # Trained model
 MODEL_PATH = MODELS_DIR / "ticket_classifier.joblib"
