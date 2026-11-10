@@ -4,6 +4,7 @@ from fastapi import FastAPI, Request, HTTPException
 from pydantic import BaseModel, Field, field_validator
 from src.logging_config import configure_logging
 from src.settings import get_settings
+from src.monitoring.prediction_monitor import PredictionMonitor
 
 configure_logging()
 
@@ -14,8 +15,12 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.model = load_model()
+    app.state.prediction_monitor = PredictionMonitor()
+
     yield
+
     app.state.model = None
+    app.state.prediction_monitor = None
 
 
 settings = get_settings()
@@ -58,6 +63,22 @@ def readiness_check(request: Request):
         "model_loaded": True,
     }
 
+@app.get("/monitoring")
+def monitoring_report(request: Request):
+    monitor = getattr(
+        request.app.state,
+        "prediction_monitor",
+        None,
+    )
+
+    if monitor is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Monitoring is not available.",
+        )
+
+    return monitor.generate_report()
+
 
 class TicketRequest(BaseModel):
     ticket_text: str = Field(
@@ -94,6 +115,16 @@ def predict(request: TicketRequest, http_request: Request):
         predicted_class, ranked_predictions = predict_with_model(
             model,
             request.ticket_text,
+        )
+
+        confidence = ranked_predictions[0][1]
+
+        monitor = http_request.app.state.prediction_monitor
+
+        monitor.record_prediction(
+            category=predicted_class,
+            confidence=confidence,
+            auto_routed=False,
         )
 
         return PredictionResponse(

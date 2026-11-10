@@ -12,3 +12,4 @@ pydantic
 pydantic-settings
 pytest
 httpx2
+statsmodels==0.15.0
