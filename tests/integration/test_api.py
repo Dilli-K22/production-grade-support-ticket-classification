@@ -81,6 +81,15 @@ def test_predict_endpoint_rejects_whitespace_ticket(test_database):
 
     assert response.status_code == 422
 
+def test_predict_endpoint_rejects_oversized_ticket(test_database):
+    with TestClient(app) as client:
+        response = client.post(
+            "/predict",
+            json={"ticket_text": "A" * 5001},
+        )
+
+    assert response.status_code == 422
+
 def test_liveness_endpoint(test_database):
     with TestClient(app) as client:
         response = client.get("/health/live")
@@ -97,6 +106,7 @@ def test_readiness_endpoint_when_model_is_loaded(test_database):
     assert response.json() == {
         "status": "ready",
         "model_loaded": True,
+        "monitoring_available": True,
     }
 
 def test_readiness_endpoint_when_model_is_not_loaded(test_database):
@@ -107,7 +117,7 @@ def test_readiness_endpoint_when_model_is_not_loaded(test_database):
 
     assert response.status_code == 503
     assert response.json() == {
-        "detail": "Model is not ready."
+        "detail": "Application dependencies are not ready."
     }
 
 def test_application_startup_fails_when_model_cannot_load(test_database):
@@ -206,3 +216,62 @@ def test_monitoring_returns_503_when_monitor_is_unavailable(test_database):
     assert response.json() == {
         "detail": "Monitoring is not available."
     }
+
+def test_prediction_succeeds_when_monitoring_recording_fails(test_database):
+    with patch(
+        "src.api.PredictionMonitor.record_prediction",
+        side_effect=RuntimeError("Database unavailable"),
+    ):
+        with TestClient(app) as client:
+            response = client.post(
+                "/predict",
+                json={
+                    "ticket_text": "My laptop screen is not working",
+                },
+            )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["predicted_category"] in {
+        "Access",
+        "Administrative rights",
+        "HR Support",
+        "Hardware",
+        "Internal Project",
+        "Miscellaneous",
+        "Purchase",
+        "Storage",
+    }
+
+    assert len(data["probabilities"]) == 8
+
+def test_readiness_reports_monitoring_status(test_database):
+    with TestClient(app) as client:
+        client.app.state.prediction_monitor = None
+
+        response = client.get("/health/ready")
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "detail": "Application dependencies are not ready."
+    }
+
+
+def test_application_startup_fails_when_monitoring_cannot_initialize(
+    test_database,
+):
+    with patch(
+        "src.api.PredictionMonitor",
+        side_effect=RuntimeError("Monitoring initialization failed"),
+    ):
+        with pytest.raises(
+            RuntimeError,
+            match="Monitoring initialization failed",
+        ):
+            with TestClient(app):
+                pass
+
+    assert app.state.model is None
+    assert app.state.prediction_monitor is None

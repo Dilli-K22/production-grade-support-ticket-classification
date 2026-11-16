@@ -12,15 +12,39 @@ from src.predict import load_model, predict_with_model
 
 logger = logging.getLogger(__name__)
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.model = load_model()
-    app.state.prediction_monitor = PredictionMonitor()
-
-    yield
-
     app.state.model = None
     app.state.prediction_monitor = None
+
+    # Application startup
+    try:
+        app.state.model = load_model()
+        logger.info("ML model loaded successfully.")
+
+        app.state.prediction_monitor = PredictionMonitor()
+        logger.info("Prediction monitoring initialized successfully.")
+
+    except Exception:
+        logger.exception("Application startup failed.")
+
+        app.state.model = None
+        app.state.prediction_monitor = None
+
+        raise
+
+    logger.info("Application startup completed successfully.")
+
+    try:
+        yield
+
+    finally:
+        # Application shutdown
+        app.state.model = None
+        app.state.prediction_monitor = None
+
+        logger.info("Application shutdown completed.")
 
 
 settings = get_settings()
@@ -51,17 +75,23 @@ def liveness_check():
 def readiness_check(request: Request):
     model_loaded = getattr(request.app.state, "model", None) is not None
 
-    if not model_loaded:
+    monitor_available = (
+        getattr(request.app.state, "prediction_monitor", None)
+        is not None
+    )
 
+    if not model_loaded or not monitor_available:
         raise HTTPException(
             status_code=503,
-            detail="Model is not ready.",
+            detail="Application dependencies are not ready.",
         )
 
     return {
         "status": "ready",
         "model_loaded": True,
+        "monitoring_available": True,
     }
+
 
 @app.get("/monitoring")
 def monitoring_report(request: Request):
@@ -83,6 +113,7 @@ def monitoring_report(request: Request):
 class TicketRequest(BaseModel):
     ticket_text: str = Field(
         min_length=1,
+        max_length=5000,
         description="The support ticket text to classify.",
         examples=["My laptop screen is not working"],
     )
@@ -101,6 +132,7 @@ class PredictionResponse(BaseModel):
     probabilities: dict[str, float]
 
 
+
 @app.post("/predict", response_model=PredictionResponse)
 def predict(request: TicketRequest, http_request: Request):
     model = getattr(http_request.app.state, "model", None)
@@ -111,6 +143,7 @@ def predict(request: TicketRequest, http_request: Request):
             detail="Prediction service is not ready.",
         )
 
+    # Step 1: Perform model prediction.
     try:
         predicted_class, ranked_predictions = predict_with_model(
             model,
@@ -119,15 +152,7 @@ def predict(request: TicketRequest, http_request: Request):
 
         confidence = ranked_predictions[0][1]
 
-        monitor = http_request.app.state.prediction_monitor
-
-        monitor.record_prediction(
-            category=predicted_class,
-            confidence=confidence,
-            auto_routed=False,
-        )
-
-        return PredictionResponse(
+        response = PredictionResponse(
             predicted_category=predicted_class,
             probabilities={
                 category: float(probability)
@@ -142,3 +167,24 @@ def predict(request: TicketRequest, http_request: Request):
             status_code=500,
             detail="An internal error occurred while processing the ticket.",
         ) from None
+
+    # Step 2: Record monitoring event separately.
+    monitor = getattr(
+        http_request.app.state,
+        "prediction_monitor",
+        None,
+    )
+
+    if monitor is not None:
+        try:
+            monitor.record_prediction(
+                category=predicted_class,
+                confidence=confidence,
+                auto_routed=False,
+            )
+        except Exception:
+            logger.exception(
+                "Prediction succeeded, but monitoring recording failed."
+            )
+
+    return response

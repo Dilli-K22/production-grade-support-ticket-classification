@@ -19,3 +19,7 @@ logs/
 build/
 dist/
 *.egg-info/
+# SQLite databases and backups
+*.db
+*.db-shm
+*.db-wal

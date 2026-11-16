@@ -54,3 +54,8 @@ dist/
 # Generated evaluation reports
 reports/*
 !reports/.gitkeep
+
+# Local monitoring database backups
+monitoring-backup.db
+monitoring-backup.db-shm
+monitoring-backup.db-wal
