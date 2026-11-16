@@ -241,6 +241,21 @@ def test_database_rejects_empty_category(tmp_path):
             "human_review",
         )
 
+@pytest.mark.parametrize("invalid_url", [0, False, []])
+def test_rejects_non_string_database_url(invalid_url, tmp_path):
+    with pytest.raises(TypeError, match="Database URL must be a string"):
+        MonitoringDatabase(
+            database_path=tmp_path / "monitoring.db",
+            database_url=invalid_url,
+        )
+
+
+def test_rejects_empty_database_url(tmp_path):
+    with pytest.raises(ValueError, match="Database URL must not be empty"):
+        MonitoringDatabase(
+            database_path=tmp_path / "monitoring.db",
+            database_url="   ",
+        )
 
 def test_database_indexes_are_created(tmp_path):
     database = MonitoringDatabase(tmp_path / "test.db")

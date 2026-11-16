@@ -3,6 +3,7 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
+from src.settings import get_settings
 from src.monitoring.database import MonitoringDatabase
 
 
@@ -16,15 +17,21 @@ class PredictionMonitor:
         if database is not None:
             self.database = database
         else:
-            database_path = Path(
-                os.getenv(
-                    "MONITORING_DATABASE_PATH",
-                    "data/monitoring.db",
+            settings = get_settings()
+
+            if settings.database_url:
+                self.database = MonitoringDatabase(
+                    database_url=settings.database_url
                 )
-            )
-            self.database = MonitoringDatabase(
-                database_path=database_path
-            )
+            else:
+                database_path = os.getenv(
+                    "MONITORING_DATABASE_PATH",
+                    settings.monitoring_database_path,
+                )
+
+                self.database = MonitoringDatabase(
+                    database_path=Path(database_path)
+                )
 
     def record_prediction(
         self,

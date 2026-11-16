@@ -47,3 +47,28 @@ def test_app_version_can_be_overridden(monkeypatch):
         assert settings.app_version == "2.0.0"
     finally:
         get_settings.cache_clear()
+
+
+def test_default_database_settings():
+    settings = Settings()
+
+    assert settings.database_url is None
+    assert settings.monitoring_database_path == "data/monitoring.db"
+
+
+def test_database_url_can_be_overridden():
+    settings = Settings(
+        database_url="postgresql://user:password@localhost:5432/tickets"
+    )
+
+    assert settings.database_url == (
+        "postgresql://user:password@localhost:5432/tickets"
+    )
+
+
+def test_monitoring_database_path_can_be_overridden():
+    settings = Settings(
+        monitoring_database_path="custom/monitoring.db"
+    )
+
+    assert settings.monitoring_database_path == "custom/monitoring.db"

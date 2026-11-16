@@ -1,3 +1,4 @@
+
 from typing import Literal
 from functools import lru_cache
 
@@ -9,6 +10,9 @@ class Settings(BaseSettings):
     app_version: str = "1.0.0"
     environment: str = "development"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
+
+    database_url: str | None = None
+    monitoring_database_path: str = "data/monitoring.db"
 
     model_config = SettingsConfigDict(
         env_prefix="TICKET_",

@@ -2,7 +2,10 @@ import pytest
 
 from src.monitoring.database import MonitoringDatabase
 from src.monitoring.prediction_monitor import PredictionMonitor
+from pathlib import Path
 
+from src.settings import Settings
+import src.monitoring.prediction_monitor as prediction_monitor_module
 
 @pytest.fixture
 def monitor(tmp_path):
@@ -72,3 +75,78 @@ def test_boolean_confidence_raises_type_error(monitor, confidence):
             confidence=confidence,
             auto_routed=False,
         )
+
+
+def test_postgres_database_is_selected_when_url_is_configured(monkeypatch):
+    created = {}
+
+    def fake_database(**kwargs):
+        created.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(
+        prediction_monitor_module,
+        "get_settings",
+        lambda: Settings(
+            database_url="postgresql://test:test@localhost:5432/test_db"
+        ),
+    )
+    monkeypatch.setattr(
+        prediction_monitor_module,
+        "MonitoringDatabase",
+        fake_database,
+    )
+
+    PredictionMonitor()
+
+    assert created == {
+        "database_url": "postgresql://test:test@localhost:5432/test_db"
+    }
+
+
+def test_sqlite_uses_legacy_environment_path(monkeypatch):
+    created = {}
+
+    def fake_database(**kwargs):
+        created.update(kwargs)
+        return object()
+
+    monkeypatch.setenv(
+        "MONITORING_DATABASE_PATH",
+        "legacy/monitoring.db",
+    )
+
+    monkeypatch.setattr(
+        prediction_monitor_module,
+        "get_settings",
+        lambda: Settings(
+            database_url=None,
+            monitoring_database_path="configured/monitoring.db",
+        ),
+    )
+    monkeypatch.setattr(
+        prediction_monitor_module,
+        "MonitoringDatabase",
+        fake_database,
+    )
+
+    PredictionMonitor()
+
+    assert created["database_path"] == Path("legacy/monitoring.db")
+
+
+def test_injected_database_is_preserved(monkeypatch):
+    injected_database = object()
+
+    def unexpected_database_creation(**kwargs):
+        raise AssertionError("Database should not be created")
+
+    monkeypatch.setattr(
+        prediction_monitor_module,
+        "MonitoringDatabase",
+        unexpected_database_creation,
+    )
+
+    monitor = PredictionMonitor(database=injected_database)
+
+    assert monitor.database is injected_database

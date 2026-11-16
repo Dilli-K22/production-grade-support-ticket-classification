@@ -1,7 +1,11 @@
+
 import sqlite3
-from pathlib import Path
-from datetime import datetime, timezone, timedelta
 from contextlib import contextmanager
+from datetime import datetime, timezone, timedelta
+from pathlib import Path
+
+from sqlalchemy import create_engine
+from sqlalchemy.engine import make_url
 
 
 DATABASE_PATH = Path("data/monitoring.db")
@@ -12,28 +16,90 @@ VALID_ROUTING_STATUSES = {
 }
 
 
+class _PostgresConnection:
+    """Adapts SQLAlchemy connections to the existing database interface."""
+
+    def __init__(self, connection):
+        self._connection = connection
+        self._transaction = connection.begin()
+
+    def execute(self, statement, parameters=()):
+        # Existing database queries use SQLite-style positional placeholders.
+        # Psycopg uses %s for positional parameters.
+        postgres_statement = statement.replace("?", "%s")
+        return self._connection.exec_driver_sql(
+            postgres_statement,
+            parameters,
+        )
+
+    def commit(self):
+        if self._transaction.is_active:
+            self._transaction.commit()
+
+    def rollback(self):
+        if self._transaction.is_active:
+            self._transaction.rollback()
+
+    def close(self):
+        self._connection.close()
+
+
 class MonitoringDatabase:
-    """Handles persistent storage of prediction monitoring events."""
+    """Persistent monitoring storage supporting SQLite and PostgreSQL."""
 
     def __init__(
         self,
         database_path: Path = DATABASE_PATH,
         timeout: float = 10.0,
+        database_url: str | None = None,
     ):
         if timeout <= 0:
             raise ValueError("Database timeout must be greater than zero.")
 
         self.database_path = Path(database_path)
         self.timeout = timeout
+        self.database_url = database_url
+        self.engine = None
 
-        self.database_path.parent.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
+        if database_url is not None:
+            if not isinstance(database_url, str):
+                raise TypeError("Database URL must be a string.")
+
+            if not database_url.strip():
+                raise ValueError("Database URL must not be empty.")
+
+            url = make_url(database_url)
+
+            if url.get_backend_name() != "postgresql":
+                raise ValueError("Only PostgreSQL URLs are supported.")
+
+            # Explicitly select Psycopg 3 as the PostgreSQL driver.
+            url = url.set(drivername="postgresql+psycopg")
+
+            self.engine = create_engine(
+                url,
+                pool_pre_ping=True,
+                connect_args={
+                    "connect_timeout": max(1, int(timeout)),
+                },
+            )
+        else:
+            self.database_path.parent.mkdir(
+                parents=True,
+                exist_ok=True,
+            )
 
         self.initialize_database()
 
+    @property
+    def is_postgres(self) -> bool:
+        return self.engine is not None
+
     def get_connection(self):
+        if self.is_postgres:
+            connection = self.engine.connect()
+            return _PostgresConnection(connection)
+
         connection = sqlite3.connect(
             self.database_path,
             timeout=self.timeout,
@@ -45,23 +111,42 @@ class MonitoringDatabase:
 
     def initialize_database(self):
         with self.connection() as connection:
-            connection.execute("PRAGMA journal_mode = WAL")
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS prediction_events (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    timestamp TEXT NOT NULL,
-                    predicted_category TEXT NOT NULL,
-                    confidence REAL NOT NULL
-                        CHECK(confidence >= 0 AND confidence <= 1),
-                    routing_status TEXT NOT NULL
-                        CHECK(routing_status IN (
-                            'automatically_routed',
-                            'human_review'
-                        ))
+            if self.is_postgres:
+                connection.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS prediction_events (
+                        id BIGSERIAL PRIMARY KEY,
+                        timestamp TEXT NOT NULL,
+                        predicted_category TEXT NOT NULL,
+                        confidence DOUBLE PRECISION NOT NULL
+                            CHECK(confidence >= 0 AND confidence <= 1),
+                        routing_status TEXT NOT NULL
+                            CHECK(routing_status IN (
+                                'automatically_routed',
+                                'human_review'
+                            ))
+                    )
+                    """
                 )
-                """
-            )
+            else:
+                connection.execute("PRAGMA journal_mode = WAL")
+
+                connection.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS prediction_events (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        timestamp TEXT NOT NULL,
+                        predicted_category TEXT NOT NULL,
+                        confidence REAL NOT NULL
+                            CHECK(confidence >= 0 AND confidence <= 1),
+                        routing_status TEXT NOT NULL
+                            CHECK(routing_status IN (
+                                'automatically_routed',
+                                'human_review'
+                            ))
+                    )
+                    """
+                )
 
             connection.execute(
                 """
@@ -117,10 +202,17 @@ class MonitoringDatabase:
             timezone.utc
         ).isoformat()
 
-        if not isinstance(predicted_category, str) or not predicted_category.strip():
-            raise ValueError("Predicted category must be a non-empty string.")
+        if (
+            not isinstance(predicted_category, str)
+            or not predicted_category.strip()
+        ):
+            raise ValueError(
+                "Predicted category must be a non-empty string."
+            )
 
-        if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
+        if isinstance(confidence, bool) or not isinstance(
+            confidence, (int, float)
+        ):
             raise TypeError("Confidence must be numeric.")
 
         if not 0 <= confidence <= 1:
@@ -147,11 +239,13 @@ class MonitoringDatabase:
                     routing_status,
                 ),
             )
+
     def _generate_time_window_report(
         self,
         connection,
         start_time: datetime,
     ) -> dict:
+
         start_timestamp = start_time.astimezone(
             timezone.utc
         ).isoformat()
@@ -200,6 +294,7 @@ class MonitoringDatabase:
             "routing_distribution": dict(routing_rows),
             "average_confidence": average_confidence,
         }
+
     def generate_report(self) -> dict:
         with self.connection() as connection:
             now = datetime.now(timezone.utc)
@@ -213,6 +308,7 @@ class MonitoringDatabase:
                 connection,
                 now - timedelta(days=7),
             )
+
             total_predictions = connection.execute(
                 "SELECT COUNT(*) FROM prediction_events"
             ).fetchone()[0]
