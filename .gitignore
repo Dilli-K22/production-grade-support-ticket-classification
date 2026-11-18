@@ -59,3 +59,7 @@ reports/*
 monitoring-backup.db
 monitoring-backup.db-shm
 monitoring-backup.db-wal
+# Monitoring database
+*.db
+*.db-shm
+*.db-wal
