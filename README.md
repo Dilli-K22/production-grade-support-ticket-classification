@@ -2,9 +2,14 @@
 
 An end-to-end machine learning and MLOps application that automatically classifies IT support tickets into eight categories, provides confidence-based routing decisions, and monitors predictions through a production-oriented API.
 
-**Live API:** https://support-ticket-classifier-api-9q6z.onrender.com
-**API Documentation:** https://support-ticket-classifier-api-9q6z.onrender.com/docs
-**Health Check:** https://support-ticket-classifier-api-9q6z.onrender.com/health/ready
+
+## Live Demo
+
+- **Live API:** [Open Application](https://support-ticket-classifier-api-9q6z.onrender.com)
+- **API Documentation:** [Swagger UI](https://support-ticket-classifier-api-9q6z.onrender.com/docs)
+- **Health Check:** [Check API Status](https://support-ticket-classifier-api-9q6z.onrender.com/health/ready)
+- **Monitoring:** [View Prediction Metrics](https://support-ticket-classifier-api-9q6z.onrender.com/monitoring)
+
 
 ---
 
