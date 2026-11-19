@@ -2,6 +2,7 @@
 from typing import Literal
 from functools import lru_cache
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -13,6 +14,7 @@ class Settings(BaseSettings):
 
     database_url: str | None = None
     monitoring_database_path: str = "data/monitoring.db"
+    monitoring_api_key: SecretStr | None = None
 
     model_config = SettingsConfigDict(
         env_prefix="TICKET_",

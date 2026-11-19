@@ -1,9 +1,11 @@
 from fastapi.testclient import TestClient
 from unittest.mock import patch
-from src.api import app
+from src.api import app, settings
 import pytest
 from src.predict import predict_with_model
+from pydantic import SecretStr
 
+TEST_MONITORING_API_KEY = "test-monitoring-api-key"
 
 @pytest.fixture
 def test_database(tmp_path, monkeypatch):
@@ -12,6 +14,12 @@ def test_database(tmp_path, monkeypatch):
     monkeypatch.setenv(
         "MONITORING_DATABASE_PATH",
         str(database_path),
+    )
+
+    monkeypatch.setattr(
+        settings,
+        "monitoring_api_key",
+        SecretStr(TEST_MONITORING_API_KEY),
     )
 
     return database_path
@@ -143,7 +151,6 @@ def test_predict_returns_503_when_model_is_not_loaded(test_database):
         "detail": "Prediction service is not ready."
     }
 
-
 def test_predict_returns_500_when_prediction_fails(test_database):
     with patch(
         "src.api.predict_with_model",
@@ -161,9 +168,47 @@ def test_predict_returns_500_when_prediction_fails(test_database):
     }
     assert "Sensitive internal detail" not in response.text
 
-def test_monitoring_endpoint_returns_valid_report(test_database):
+def test_monitoring_rejects_missing_api_key(test_database):
     with TestClient(app) as client:
         response = client.get("/monitoring")
+
+    assert response.status_code == 401
+    assert response.json() == {
+        "detail": "Invalid or missing API key."
+    }
+
+def test_monitoring_rejects_invalid_api_key(test_database):
+    with TestClient(app) as client:
+        response = client.get(
+            "/monitoring",
+            headers={"X-API-Key": "incorrect-api-key"},
+        )
+
+    assert response.status_code == 401
+    assert response.json() == {
+        "detail": "Invalid or missing API key."
+    }
+
+def test_monitoring_returns_503_when_api_key_is_not_configured(
+    test_database,
+    monkeypatch,
+):
+    monkeypatch.setattr(settings, "monitoring_api_key", None)
+
+    with TestClient(app) as client:
+        response = client.get(
+            "/monitoring",
+            headers={"X-API-Key": TEST_MONITORING_API_KEY},
+        )
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "detail": "Monitoring authentication is not configured."
+    }
+
+def test_monitoring_endpoint_returns_valid_report(test_database):
+    with TestClient(app) as client:
+        response = client.get("/monitoring", headers={"X-API-Key": TEST_MONITORING_API_KEY},)
 
     assert response.status_code == 200
 
@@ -191,8 +236,13 @@ def test_monitoring_endpoint_returns_valid_report(test_database):
         assert "average_confidence" in metrics
 
 def test_monitoring_records_prediction(test_database):
+    headers = {"X-API-Key": TEST_MONITORING_API_KEY}
+
     with TestClient(app) as client:
-        before = client.get("/monitoring").json()["total_predictions"]
+        before = client.get(
+            "/monitoring",
+            headers=headers,
+        ).json()["total_predictions"]
 
         prediction_response = client.post(
             "/predict",
@@ -201,7 +251,10 @@ def test_monitoring_records_prediction(test_database):
             },
         )
 
-        after = client.get("/monitoring").json()["total_predictions"]
+        after = client.get(
+            "/monitoring",
+            headers=headers,
+        ).json()["total_predictions"]
 
     assert prediction_response.status_code == 200
     assert after == before + 1
@@ -210,7 +263,7 @@ def test_monitoring_returns_503_when_monitor_is_unavailable(test_database):
     with TestClient(app) as client:
         client.app.state.prediction_monitor = None
 
-        response = client.get("/monitoring")
+        response = client.get("/monitoring", headers={"X-API-Key": TEST_MONITORING_API_KEY},)
 
     assert response.status_code == 503
     assert response.json() == {
@@ -257,7 +310,6 @@ def test_readiness_reports_monitoring_status(test_database):
     assert response.json() == {
         "detail": "Application dependencies are not ready."
     }
-
 
 def test_application_startup_fails_when_monitoring_cannot_initialize(
     test_database,

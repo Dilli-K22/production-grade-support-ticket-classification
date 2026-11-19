@@ -1,6 +1,7 @@
 import logging
+import hmac
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, Header, Depends
 from pydantic import BaseModel, Field, field_validator
 from src.logging_config import configure_logging
 from src.settings import get_settings
@@ -92,9 +93,32 @@ def readiness_check(request: Request):
         "monitoring_available": True,
     }
 
+def verify_monitoring_api_key(
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+):
+    configured_key = settings.monitoring_api_key
+
+    # Fail closed if the server has no API key configured.
+    if configured_key is None or not configured_key.get_secret_value():
+        raise HTTPException(
+            status_code=503,
+            detail="Monitoring authentication is not configured.",
+        )
+
+    if x_api_key is None or not hmac.compare_digest(
+        x_api_key.encode("utf-8"),
+        configured_key.get_secret_value().encode("utf-8"),
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or missing API key.",
+        )
 
 @app.get("/monitoring")
-def monitoring_report(request: Request):
+def monitoring_report(
+    request: Request,
+    _: None = Depends(verify_monitoring_api_key),
+):
     monitor = getattr(
         request.app.state,
         "prediction_monitor",
