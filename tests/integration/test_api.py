@@ -4,8 +4,15 @@ from src.api import app, settings
 import pytest
 from src.predict import predict_with_model
 from pydantic import SecretStr
+from src.api import app, settings, limiter
 
 TEST_MONITORING_API_KEY = "test-monitoring-api-key"
+
+@pytest.fixture(autouse=True)
+def reset_rate_limiter():
+    limiter.reset()
+    yield
+    limiter.reset()
 
 @pytest.fixture
 def test_database(tmp_path, monkeypatch):
@@ -68,6 +75,27 @@ def test_predict_endpoint_returns_valid_prediction(test_database):
         for probability in probabilities.values()
     )
     assert abs(sum(probabilities.values()) - 1.0) < 1e-6
+
+
+def test_predict_rate_limit_returns_429(test_database):
+    limiter.reset()
+
+    with TestClient(app) as client:
+        responses = [
+            client.post(
+                "/predict",
+                json={
+                    "ticket_text": "My laptop screen is not working",
+                },
+            )
+            for _ in range(31)
+        ]
+
+    assert all(
+        response.status_code == 200
+        for response in responses[:30]
+    )
+    assert responses[30].status_code == 429
 
 
 def test_predict_endpoint_rejects_empty_ticket(test_database):

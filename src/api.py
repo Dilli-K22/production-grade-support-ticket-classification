@@ -6,6 +6,10 @@ from pydantic import BaseModel, Field, field_validator
 from src.logging_config import configure_logging
 from src.settings import get_settings
 from src.monitoring.prediction_monitor import PredictionMonitor
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from slowapi.extension import _rate_limit_exceeded_handler
 
 configure_logging()
 
@@ -50,6 +54,8 @@ async def lifespan(app: FastAPI):
 
 settings = get_settings()
 
+limiter = Limiter(key_func=get_remote_address)
+
 app = FastAPI(
     title=settings.app_name,
     description="Classifies IT support tickets into predefined categories.",
@@ -57,6 +63,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.state.limiter = limiter
+app.add_exception_handler(
+    RateLimitExceeded,
+    _rate_limit_exceeded_handler,
+)
 
 @app.get("/health")
 def health_check(request: Request):
@@ -157,9 +168,13 @@ class PredictionResponse(BaseModel):
 
 
 
-@app.post("/predict", response_model=PredictionResponse)
-def predict(request: TicketRequest, http_request: Request):
-    model = getattr(http_request.app.state, "model", None)
+@app.post(
+    "/predict",
+    response_model=PredictionResponse,
+)
+@limiter.limit("30/minute")
+def predict(ticket_request: TicketRequest, request: Request):
+    model = getattr(request.app.state, "model", None)
 
     if model is None:
         raise HTTPException(
@@ -171,7 +186,7 @@ def predict(request: TicketRequest, http_request: Request):
     try:
         predicted_class, ranked_predictions = predict_with_model(
             model,
-            request.ticket_text,
+            ticket_request.ticket_text,
         )
 
         confidence = ranked_predictions[0][1]
@@ -194,7 +209,7 @@ def predict(request: TicketRequest, http_request: Request):
 
     # Step 2: Record monitoring event separately.
     monitor = getattr(
-        http_request.app.state,
+        request.app.state,
         "prediction_monitor",
         None,
     )
